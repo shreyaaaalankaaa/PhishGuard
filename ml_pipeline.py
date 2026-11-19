@@ -9,7 +9,8 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+import sklearn
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_validate, train_test_split
@@ -34,7 +35,20 @@ class PhishingDetectionPipeline:
     def load_model(self) -> bool:
         if not self.MODEL_PATH.exists():
             return False
-        bundle = joblib.load(self.MODEL_PATH)
+        try:
+            bundle = joblib.load(self.MODEL_PATH)
+        except Exception as exc:  # noqa: BLE001 - any unpickling failure means "no usable model"
+            # Usually a scikit-learn version mismatch; see requirements.txt.
+            self.model = None
+            self.metadata = {"warning": f"Could not load the saved model ({type(exc).__name__}). Using heuristic fallback."}
+            return False
+        expected = self.extractor.feature_names()
+        trained_on = list(getattr(bundle["model"], "feature_names_in_", expected))
+        if trained_on != expected:
+            # A model trained before the feature set changed would score garbage.
+            self.model = None
+            self.metadata = {"warning": "Saved model uses an older feature set; retrain it. Using heuristic fallback."}
+            return False
         self.model = bundle["model"]
         self.metadata = bundle.get("metadata", {})
         self._use_single_thread_inference()
@@ -52,7 +66,7 @@ class PhishingDetectionPipeline:
             self.model.n_jobs = 1
 
     def save_model(self) -> None:
-        joblib.dump({"model": self.model, "metadata": self.metadata}, self.MODEL_PATH)
+        joblib.dump({"model": self.model, "metadata": self.metadata}, self.MODEL_PATH, compress=3)
         self.METADATA_PATH.write_text(json.dumps(self.metadata, indent=2), encoding="utf-8")
 
     def predict(self, url: str) -> dict[str, Any]:
@@ -62,7 +76,7 @@ class PhishingDetectionPipeline:
 
         if self.model is not None:
             frame = pd.DataFrame([features])
-            probability = float(self.model.predict_proba(frame)[0][1])
+            probability = self._with_safety_net(float(self.model.predict_proba(frame)[0][1]), features, reasons)
             engine = "machine_learning"
         else:
             probability = self._heuristic_probability(features, reasons)
@@ -97,10 +111,22 @@ class PhishingDetectionPipeline:
         normalized = [self.extractor.normalize(url) for url in urls]
         features = [self.extractor.extract_features(url) for url in normalized]
         probabilities = self.model.predict_proba(pd.DataFrame(features))[:, 1] if features else []
-        return [
-            self._build_result(url, feats, self.extractor.explain(feats), float(prob), "machine_learning")
-            for url, feats, prob in zip(normalized, features, probabilities)
-        ]
+        results = []
+        for url, feats, prob in zip(normalized, features, probabilities):
+            reasons = self.extractor.explain(feats)
+            probability = self._with_safety_net(float(prob), feats, reasons)
+            results.append(self._build_result(url, feats, reasons, probability, "machine_learning"))
+        return results
+
+    # Signals that public training sets under-represent but that are near-certain
+    # phishing on their own. The model's score is never allowed to bury them.
+    HARD_SIGNALS = ("brand_lookalike", "has_ip_host")
+
+    def _with_safety_net(self, model_probability: float, features: dict[str, float],
+                         reasons: list[dict[str, Any]]) -> float:
+        if any(features.get(name, 0) > 0 for name in self.HARD_SIGNALS):
+            return max(model_probability, self._heuristic_probability(features, reasons))
+        return model_probability
 
     def train_model(self, urls: list[str], labels: list[int]) -> dict[str, Any]:
         if len(urls) != len(labels) or len(urls) < 20:
@@ -120,8 +146,11 @@ class PhishingDetectionPipeline:
                 ("model", LogisticRegression(max_iter=2000, class_weight="balanced", random_state=42)),
             ]),
             "random_forest": RandomForestClassifier(
-                n_estimators=350, min_samples_leaf=2, class_weight="balanced_subsample",
+                n_estimators=120, min_samples_leaf=4, max_depth=22, class_weight="balanced_subsample",
                 random_state=42, n_jobs=-1,
+            ),
+            "hist_gradient_boosting": HistGradientBoostingClassifier(
+                max_iter=400, learning_rate=0.08, class_weight="balanced", random_state=42,
             ),
         }
         folds = min(5, max(2, int(np.bincount(target).min())))
@@ -160,6 +189,7 @@ class PhishingDetectionPipeline:
             "cross_validation": comparison,
             "holdout_metrics": holdout,
             "dataset_note": "Metrics are meaningful only for the dataset supplied during training.",
+            "sklearn_version": sklearn.__version__,
         }
         self.save_model()
         return self.metadata

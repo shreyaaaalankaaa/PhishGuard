@@ -31,6 +31,12 @@ class URLFeatureExtractor:
     BRAND_TERMS : ClassVar[set[str]] = {
         "paypal", "microsoft", "apple", "google", "amazon", "netflix",
         "instagram", "facebook", "whatsapp", "coinbase", "binance",
+        "linkedin", "outlook", "office365", "dropbox", "adobe", "yahoo",
+        "flipkart", "paytm", "phonepe", "hdfcbank", "icicibank", "irctc",
+    }
+    # Character swaps used in look-alike domains: paypa1 -> paypal, g00gle -> google.
+    LOOKALIKE_SWAPS : ClassVar[dict[str, str]] = {
+        "0": "o", "1": "l", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "@": "a", "$": "s",
     }
 
     def normalize(self, url: str) -> str:
@@ -92,6 +98,8 @@ class URLFeatureExtractor:
             "phishing_term_count": float(sum(token_counts[t] for t in self.PHISHING_TERMS)),
             "brand_term_count": float(sum(token_counts[t] for t in self.BRAND_TERMS)),
             "brand_in_subdomain_or_path": float(self._brand_outside_registered_domain(host, path_query)),
+            "brand_lookalike": float(self._brand_lookalike(host)),
+            "hostname_hyphen_count": float(host.count("-")),
             "hostname_entropy": float(entropy),
             "longest_token_length": float(max((len(token) for token in tokens), default=0)),
         }
@@ -102,6 +110,7 @@ class URLFeatureExtractor:
             ("has_punycode", "Internationalized-domain encoding detected", 18),
             ("has_shortener", "Known URL-shortening service", 13),
             ("has_suspicious_tld", "Higher-risk top-level domain", 12),
+            ("brand_lookalike", "Look-alike of a known brand (for example paypa1 or g00gle)", 24),
             ("brand_in_subdomain_or_path", "Brand name appears outside the main domain", 18),
             ("has_phishing_term", "Credential or account-related wording", 10),
             ("has_encoded_chars", "Percent-encoded characters present", 7),
@@ -120,6 +129,8 @@ class URLFeatureExtractor:
             reasons.append({"feature": "hostname_entropy", "label": "Hostname has high character randomness", "weight": 8})
         if features.get("digit_ratio", 0) >= 0.18:
             reasons.append({"feature": "digit_ratio", "label": "High proportion of digits", "weight": 6})
+        if features.get("hostname_hyphen_count", 0) >= 2:
+            reasons.append({"feature": "hostname_hyphen_count", "label": "Several hyphens in the hostname", "weight": 6})
         if features.get("uses_https", 0) == 0:
             reasons.append({"feature": "uses_https", "label": "Connection does not use HTTPS", "weight": 4})
         return sorted(reasons, key=lambda item: item["weight"], reverse=True)
@@ -146,6 +157,29 @@ class URLFeatureExtractor:
         counts = Counter(text)
         length = len(text)
         return -sum((count / length) * math.log2(count / length) for count in counts.values())
+
+    def _deobfuscate(self, text: str) -> str:
+        return "".join(self.LOOKALIKE_SWAPS.get(ch, ch) for ch in text).replace("rn", "m").replace("vv", "w")
+
+    def _brand_lookalike(self, host: str) -> bool:
+        """True when a hostname label spells a brand only after undoing character swaps
+        (paypa1-secure-login.com), or wraps a brand in extra words on a domain that
+        is not the brand's own (secure-paypal-login.com)."""
+        labels = [label for label in host.split(".") if label]
+        if len(labels) < 2 or self._is_ip(host):
+            return False
+        registrable = labels[-2]
+        if registrable in self.BRAND_TERMS:
+            return False  # the brand's own domain, e.g. accounts.google.com
+        for label in labels[:-1]:
+            plain = label.replace("-", "")
+            cleaned = self._deobfuscate(plain)
+            for brand in self.BRAND_TERMS:
+                if brand in cleaned and brand not in plain:
+                    return True  # spelled with swapped characters
+                if brand in plain and label != brand and "-" in label:
+                    return True  # brand padded with words: secure-paypal-login
+        return False
 
     def _brand_outside_registered_domain(self, host: str, path_query: str) -> bool:
         labels = host.split(".")

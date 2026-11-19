@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 .env
 models/*.joblib
-models/metadata.json
+# The shipped model is committed so a fresh clone scores with it.
+!models/phishguard.joblib
 .DS_Store
 data.csv

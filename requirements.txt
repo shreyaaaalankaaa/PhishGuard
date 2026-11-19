@@ -3,4 +3,5 @@ gunicorn>=22,<24
 joblib>=1.3,<2
 numpy>=1.26,<3
 pandas>=2.1,<3
-scikit-learn>=1.4,<2
+# The shipped model was trained with scikit-learn 1.9; pickles are only reliable within a minor version.
+scikit-learn>=1.9,<1.10

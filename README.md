@@ -10,7 +10,7 @@ The application does not visit submitted websites or perform DNS, WHOIS, certifi
 - Returns a classification, phishing probability, confidence value, and 0–100 risk score.
 - Explains the strongest indicators contributing to a result.
 - Supports CSV uploads and JSON batches of up to 500 URLs.
-- Loads a persisted scikit-learn model when available.
+- Ships a trained scikit-learn model (Random Forest, F1 0.71 on holdout) and loads it automatically.
 - Uses a documented heuristic fallback when no trained model is present.
 - Includes security headers, input-size limits, Docker support, tests, and GitHub Actions CI.
 
@@ -116,23 +116,40 @@ curl http://localhost:5000/api/health
 
 Additional examples are available at `/docs` when the application is running.
 
-## Training a model
+## Shipped model and how it was trained
 
-The training pipeline accepts labeled URLs directly from Python:
+A fresh clone now scores URLs with a trained Random Forest (`models/phishguard.joblib`, about 11 MB). The heuristic is the fallback if the file is missing or was trained on a different feature set.
 
-```python
-from ml_pipeline import pipeline
+**Data.** I used a 75,000-URL training set:
 
-metadata = pipeline.train_model(
-    urls=["https://example.com", "http://198.51.100.10/verify"],
-    labels=[0, 1],
-)
-print(metadata)
+- 60,000 URLs sampled from the public [faizann24 malicious-URL dataset](https://github.com/faizann24/Using-machine-learning-to-detect-malicious-URLs) (`data/data.csv`, labels good/bad).
+- Plus 15,000 legitimate URLs built from the [top 15,000 domains](https://github.com/zer0h/top-1000000-domains) (homepages, login, help, docs and search pages).
+
+The extra legitimate sites are needed because in that dataset short bare domains are mostly malicious. Trained on it alone, the model learned "short URL = phishing" and flagged `github.com`.
+
+**Results** (25% stratified holdout):
+
+| Engine | Precision | Recall | F1 | ROC-AUC |
+| --- | --- | --- | --- | --- |
+| Heuristic fallback | 0.96 | 0.05 | 0.10 | n/a |
+| Random Forest (shipped) | 0.63 | 0.82 | 0.71 | 0.95 |
+
+On 3,000 further popular domains that were never used in training, the model wrongly flagged 41 (1.4%). The full numbers are in `models/evaluation.json`.
+
+**Look-alike domains.** The `brand_lookalike` feature undoes common character swaps (`paypa1` → `paypal`, `g00gle` → `google`) and catches brands padded with words on someone else's domain (`secure-paypal-login.com`). Public datasets have few of these, so a look-alike brand or an IP-address host is a *hard signal*: the score is never lower than the heuristic's score for that URL.
+
+**Retrain it yourself:**
+
+```bash
+git clone --depth 1 https://github.com/faizann24/Using-machine-learning-to-detect-malicious-URLs.git /tmp/urldata
+git clone --depth 1 https://github.com/zer0h/top-1000000-domains.git /tmp/topdom
+python scripts/evaluate_model.py /tmp/urldata/data/data.csv --sample 60000 \
+    --legit-domains /tmp/topdom/top-100000-domains
 ```
 
-A practical training dataset should contain substantially more samples, both classes, realistic class balance, and a documented source. The pipeline compares logistic regression and random forest models through stratified cross-validation, selects the strongest F1 result, evaluates it on a holdout split, and stores the final model under `models/`.
+You can also train from Python with `pipeline.train_model(urls, labels)`. The pipeline compares logistic regression, Random Forest and histogram gradient boosting with stratified 5-fold cross-validation, keeps the best F1, and saves the model to `models/`.
 
-This repository intentionally does not claim a benchmark accuracy because no canonical dataset is bundled. Metrics depend on the dataset used for training and should be reported alongside its source, split strategy, and limitations.
+These metrics describe this dataset only. Real-world phishing changes quickly, so treat the score as one signal, not a verdict.
 
 ## Testing
 

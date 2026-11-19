@@ -3,4 +3,4 @@
 __pycache__
 .pytest_cache
 *.pyc
-models/*.joblib
+# models/phishguard.joblib is the shipped model and must be in the image

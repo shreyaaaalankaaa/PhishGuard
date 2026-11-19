@@ -1,36 +1,48 @@
 {
-  "samples": 50000,
+  "samples": 75000,
+  "popular_site_check": {
+    "popular_sites_checked": 3000,
+    "wrongly_flagged": 41,
+    "false_positive_rate": 0.0137
+  },
   "heuristic_holdout": {
-    "accuracy": 0.8451,
-    "precision": 0.9663,
-    "recall": 0.0426,
-    "f1": 0.0816
+    "accuracy": 0.8774,
+    "precision": 0.963,
+    "recall": 0.0537,
+    "f1": 0.1016
   },
   "model": "random_forest",
   "cross_validation": {
     "logistic_regression": {
-      "accuracy": 0.7463,
-      "precision": 0.3487,
-      "recall": 0.6569,
-      "f1": 0.4555,
-      "roc_auc": 0.8106
+      "accuracy": 0.7593,
+      "precision": 0.3043,
+      "recall": 0.6706,
+      "f1": 0.4187,
+      "roc_auc": 0.8217
     },
     "random_forest": {
-      "accuracy": 0.9213,
-      "precision": 0.7653,
-      "recall": 0.7403,
-      "f1": 0.7525,
-      "roc_auc": 0.9495
+      "accuracy": 0.9196,
+      "precision": 0.6519,
+      "recall": 0.8116,
+      "f1": 0.723,
+      "roc_auc": 0.9538
+    },
+    "hist_gradient_boosting": {
+      "accuracy": 0.9055,
+      "precision": 0.5937,
+      "recall": 0.8562,
+      "f1": 0.7009,
+      "roc_auc": 0.9553
     }
   },
   "model_holdout": {
-    "accuracy": 0.923,
-    "precision": 0.775,
-    "recall": 0.737,
-    "f1": 0.7555,
-    "roc_auc": 0.9496
+    "accuracy": 0.9156,
+    "precision": 0.6346,
+    "recall": 0.8184,
+    "f1": 0.7149,
+    "roc_auc": 0.9531
   },
-  "f1_gain_points": 67.4,
-  "heuristic_urls_per_sec": 6359,
-  "train_seconds": 39.7
+  "f1_gain_points": 61.3,
+  "heuristic_urls_per_sec": 14400,
+  "train_seconds": 54.3
 }
