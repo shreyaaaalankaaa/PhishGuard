@@ -58,8 +58,8 @@ Persisted ML model             Heuristic fallback
 Python 3.11 or newer is required.
 
 ```bash
-git clone https://github.com/shreyaaaalankaaa/MachineLearning-based-Phishing.git
-cd MachineLearning-based-Phishing
+git clone https://github.com/shreyaaaalankaaa/PhishGuard.git
+cd PhishGuard
 python -m venv .venv
 ```
 
