@@ -3,7 +3,7 @@
 PhishGuard is a Flask application for assessing phishing risk from the lexical and structural characteristics of a URL. It provides single-URL analysis, batch CSV processing, a JSON API, risk explanations, and an optional scikit-learn training pipeline.
 
 The application does not visit submitted websites or perform DNS, WHOIS, certificate, or reputation lookups. This keeps analysis deterministic and avoids contacting potentially malicious hosts.
-
+**Live demo:** https://phishguard-fjyt.onrender.com (free hosting; the first load can take up to a minute)
 ## Screenshots
 
 **Scanner home**
