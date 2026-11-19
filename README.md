@@ -4,6 +4,16 @@ PhishGuard is a Flask application for assessing phishing risk from the lexical a
 
 The application does not visit submitted websites or perform DNS, WHOIS, certificate, or reputation lookups. This keeps analysis deterministic and avoids contacting potentially malicious hosts.
 
+## Screenshots
+
+**Scanner home**
+
+![Scanner home](docs/screenshots/phishguard-home.png)
+
+**Result for a look-alike PayPal URL, with the signals behind the score**
+
+![Result for a look-alike PayPal URL, with the signals behind the score](docs/screenshots/phishguard-result.png)
+
 ## Capabilities
 
 - Extracts more than 30 URL features, including hostname entropy, domain structure, encoding, suspicious terms, IP-based hosts, shortened links, and path depth.
